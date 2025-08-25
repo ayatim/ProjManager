@@ -1,0 +1,86 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  color       String
+  icon        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  tasks       Task[]
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  status      String   @default("todo") // todo, in-progress, review, done
+  priority    String   @default("medium") // low, medium, high
+  assignee    String?
+  dueDate     DateTime?
+  position    Int      @default(0) // For maintaining order within columns
+  
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  labels      TaskLabel[]
+  
+  // Dependencies
+  dependsOn   TaskDependency[] @relation("DependentTask")
+  dependents  TaskDependency[] @relation("DependsOnTask")
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([projectId])
+  @@index([status])
+}
+
+model Label {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  color       String
+  createdAt   DateTime @default(now())
+  
+  tasks       TaskLabel[]
+}
+
+model TaskLabel {
+  id        String   @id @default(cuid())
+  taskId    String
+  labelId   String
+  
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label     Label    @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  
+  @@unique([taskId, labelId])
+  @@index([taskId])
+  @@index([labelId])
+}
+
+model TaskDependency {
+  id              String   @id @default(cuid())
+  dependentTaskId String   // The task that depends on another
+  dependsOnTaskId String   // The task that must be completed first
+  
+  dependentTask   Task     @relation("DependentTask", fields: [dependentTaskId], references: [id], onDelete: Cascade)
+  dependsOnTask   Task     @relation("DependsOnTask", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+  
+  createdAt       DateTime @default(now())
+  
+  @@unique([dependentTaskId, dependsOnTaskId])
+  @@index([dependentTaskId])
+  @@index([dependsOnTaskId])
+}

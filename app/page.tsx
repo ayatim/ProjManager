@@ -1,139 +1,175 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sidebar } from "@/components/sidebar";
 import { KanbanBoard } from "@/components/kanban-board";
+import { ProjectModal } from "@/components/project-modal";
+import { LabelFilter } from "@/components/label-filter";
 import { Project, Task, TaskStatus } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { 
   Search, 
-  Filter, 
   MoreHorizontal,
   Users,
   Plus,
-  Calendar
+  Calendar,
+  RefreshCw
 } from "lucide-react";
 
-// Mock data
-const mockProjects: Project[] = [
-  {
-    id: "1",
-    name: "Website Redesign",
-    description: "Redesign company website",
-    color: "#3B82F6",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: "2",
-    name: "Mobile App",
-    description: "Build mobile application",
-    color: "#10B981",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: "3",
-    name: "Marketing Campaign",
-    description: "Q4 marketing campaign",
-    color: "#F59E0B",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-];
-
-const mockTasks: Task[] = [
-  {
-    id: "1",
-    title: "Design homepage mockup",
-    description: "Create initial design concepts for the new homepage",
-    status: "todo",
-    projectId: "1",
-    priority: "high",
-    assignee: "JD",
-    tags: ["design", "ui"],
-    dueDate: new Date("2024-12-20"),
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: "2",
-    title: "Implement authentication",
-    description: "Set up user authentication system",
-    status: "in-progress",
-    projectId: "1",
-    priority: "high",
-    assignee: "AB",
-    tags: ["backend", "security"],
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: "3",
-    title: "Write API documentation",
-    description: "Document all API endpoints",
-    status: "in-progress",
-    projectId: "1",
-    priority: "medium",
-    assignee: "CD",
-    tags: ["documentation"],
-    dueDate: new Date("2024-12-15"),
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: "4",
-    title: "Code review",
-    description: "Review pull requests for feature branch",
-    status: "review",
-    projectId: "1",
-    priority: "medium",
-    assignee: "EF",
-    tags: ["review"],
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: "5",
-    title: "Deploy to staging",
-    description: "Deploy latest changes to staging environment",
-    status: "done",
-    projectId: "1",
-    priority: "low",
-    assignee: "GH",
-    tags: ["deployment"],
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-];
-
 export default function Home() {
-  const [projects] = useState(mockProjects);
-  const [tasks, setTasks] = useState(mockTasks);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("1");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
+  useEffect(() => {
+    if (selectedProjectId && selectedProjectId !== "dashboard") {
+      fetchTasks();
+    }
+  }, [selectedProjectId, selectedLabels]);
+
+  const fetchProjects = async () => {
+    try {
+      const response = await fetch("/api/projects");
+      if (response.ok) {
+        const data = await response.json();
+        setProjects(data);
+        
+        // Select first project if none selected
+        if (!selectedProjectId && data.length > 0) {
+          setSelectedProjectId(data[0].id);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch projects:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTasks = async () => {
+    if (!selectedProjectId || selectedProjectId === "dashboard") return;
+    
+    setRefreshing(true);
+    try {
+      let url = `/api/tasks?projectId=${selectedProjectId}`;
+      
+      // Add label filter if any labels are selected
+      if (selectedLabels.length > 0) {
+        // For simplicity, we'll filter by the first label
+        // You could enhance this to support multiple labels
+        url += `&label=${encodeURIComponent(selectedLabels[0])}`;
+      }
+      
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        setTasks(data);
+      }
+    } catch (error) {
+      console.error("Failed to fetch tasks:", error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleProjectSelect = (projectId: string) => {
     setSelectedProjectId(projectId);
+    setSelectedLabels([]); // Clear filters when switching projects
   };
 
   const handleNewProject = () => {
-    console.log("Create new project");
+    setProjectModalOpen(true);
   };
 
-  const handleTaskMove = (taskId: string, newStatus: TaskStatus) => {
+  const handleProjectCreated = () => {
+    fetchProjects();
+  };
+
+  const handleTaskMove = async (taskId: string, newStatus: TaskStatus) => {
+    // Optimistically update UI
     setTasks(tasks.map(task => 
       task.id === taskId ? { ...task, status: newStatus } : task
     ));
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}/move`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (!response.ok) {
+        // Revert on error
+        fetchTasks();
+      }
+    } catch (error) {
+      console.error("Failed to move task:", error);
+      // Revert on error
+      fetchTasks();
+    }
   };
 
-  const handleNewTask = (status: TaskStatus) => {
-    console.log("Create new task with status:", status);
+  const handleNewTask = async (status: TaskStatus) => {
+    if (!selectedProjectId || selectedProjectId === "dashboard") return;
+    
+    // For now, create a simple task
+    // You could open a modal here for more detailed task creation
+    const title = prompt("Enter task title:");
+    if (!title) return;
+
+    try {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title,
+          projectId: selectedProjectId,
+          status,
+        }),
+      });
+
+      if (response.ok) {
+        fetchTasks();
+      }
+    } catch (error) {
+      console.error("Failed to create task:", error);
+    }
   };
 
   const selectedProject = projects.find(p => p.id === selectedProjectId);
-  const projectTasks = tasks.filter(t => t.projectId === selectedProjectId);
+  
+  // Filter tasks by search query
+  const filteredTasks = tasks.filter(task => {
+    if (!searchQuery) return true;
+    return task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           task.description?.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p>Loading projects...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen">
@@ -173,7 +209,11 @@ export default function Home() {
                 <Users className="mr-2 h-4 w-4" />
                 Share
               </Button>
-              <Button size="sm">
+              <Button 
+                size="sm"
+                onClick={() => handleNewTask("todo")}
+                disabled={selectedProjectId === "dashboard"}
+              >
                 <Plus className="mr-2 h-4 w-4" />
                 Add Task
               </Button>
@@ -190,15 +230,25 @@ export default function Home() {
                 <Input
                   placeholder="Search tasks..."
                   className="w-64 pl-9"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <Button variant="outline" size="sm">
-                <Filter className="mr-2 h-4 w-4" />
-                Filter
-              </Button>
+              <LabelFilter
+                selectedLabels={selectedLabels}
+                onLabelsChange={setSelectedLabels}
+              />
               <Button variant="outline" size="sm">
                 <Calendar className="mr-2 h-4 w-4" />
                 Calendar
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={fetchTasks}
+                disabled={refreshing}
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
               </Button>
             </div>
             
@@ -210,22 +260,38 @@ export default function Home() {
 
         {/* Kanban Board */}
         <div className="flex-1 overflow-hidden bg-gray-50 p-6">
-          {selectedProjectId === "dashboard" ? (
+          {selectedProjectId === "dashboard" || !selectedProjectId ? (
             <div className="flex h-full items-center justify-center">
               <div className="text-center">
                 <h2 className="text-xl font-semibold mb-2">Welcome to ProjManager</h2>
-                <p className="text-muted-foreground">Select a project to view its tasks</p>
+                <p className="text-muted-foreground mb-4">
+                  {projects.length === 0 
+                    ? "Create your first project to get started"
+                    : "Select a project to view its tasks"}
+                </p>
+                {projects.length === 0 && (
+                  <Button onClick={handleNewProject}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create First Project
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
             <KanbanBoard
-              tasks={projectTasks}
+              tasks={filteredTasks}
               onTaskMove={handleTaskMove}
               onNewTask={handleNewTask}
             />
           )}
         </div>
       </div>
+
+      <ProjectModal
+        open={projectModalOpen}
+        onClose={() => setProjectModalOpen(false)}
+        onProjectCreated={handleProjectCreated}
+      />
     </div>
   );
 }
