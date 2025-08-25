@@ -4,9 +4,10 @@ import { prisma } from '@/lib/prisma';
 // POST move task to different status
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await request.json();
     const { status, position } = body;
     
@@ -19,7 +20,7 @@ export async function POST(
     
     // Get the task to find its project
     const task = await prisma.task.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: { projectId: true, status: true }
     });
     
@@ -51,7 +52,7 @@ export async function POST(
     
     // Update task status and position
     const updatedTask = await prisma.task.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         status,
         position: newPosition

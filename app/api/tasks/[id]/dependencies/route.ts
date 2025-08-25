@@ -4,14 +4,15 @@ import { prisma } from '@/lib/prisma';
 // GET task dependencies
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const dependencies = await prisma.taskDependency.findMany({
       where: {
         OR: [
-          { dependentTaskId: params.id },
-          { dependsOnTaskId: params.id }
+          { dependentTaskId: id },
+          { dependsOnTaskId: id }
         ]
       },
       include: {
@@ -36,10 +37,10 @@ export async function GET(
     
     return NextResponse.json({
       dependsOn: dependencies
-        .filter(d => d.dependentTaskId === params.id)
+        .filter(d => d.dependentTaskId === id)
         .map(d => d.dependsOnTask),
       dependents: dependencies
-        .filter(d => d.dependsOnTaskId === params.id)
+        .filter(d => d.dependsOnTaskId === id)
         .map(d => d.dependentTask)
     });
   } catch (error) {
@@ -54,9 +55,10 @@ export async function GET(
 // POST add dependency
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await request.json();
     const { dependsOnTaskId } = body;
     
@@ -70,7 +72,7 @@ export async function POST(
     // Check if both tasks exist and are in the same project
     const [dependentTask, dependsOnTask] = await Promise.all([
       prisma.task.findUnique({
-        where: { id: params.id },
+        where: { id },
         select: { projectId: true }
       }),
       prisma.task.findUnique({
@@ -94,7 +96,7 @@ export async function POST(
     }
     
     // Check for circular dependency
-    const wouldCreateCycle = await checkForCycle(params.id, dependsOnTaskId);
+    const wouldCreateCycle = await checkForCycle(id, dependsOnTaskId);
     if (wouldCreateCycle) {
       return NextResponse.json(
         { error: 'This would create a circular dependency' },
@@ -105,7 +107,7 @@ export async function POST(
     // Create the dependency
     const dependency = await prisma.taskDependency.create({
       data: {
-        dependentTaskId: params.id,
+        dependentTaskId: id,
         dependsOnTaskId
       },
       include: {
@@ -126,9 +128,10 @@ export async function POST(
 // DELETE remove dependency
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const searchParams = request.nextUrl.searchParams;
     const dependsOnTaskId = searchParams.get('dependsOnTaskId');
     
@@ -141,7 +144,7 @@ export async function DELETE(
     
     await prisma.taskDependency.deleteMany({
       where: {
-        dependentTaskId: params.id,
+        dependentTaskId: id,
         dependsOnTaskId
       }
     });

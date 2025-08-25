@@ -19,6 +19,7 @@ import {
 import { Task, TaskStatus } from "@/types";
 import { KanbanColumn } from "./kanban-column";
 import { TaskCard } from "./task-card";
+import { DraggableTaskCard } from "./draggable-task-card";
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -128,7 +129,7 @@ export function KanbanBoard({ tasks, onTaskMove, onNewTask }: KanbanBoardProps) 
               >
                 <div className="space-y-3">
                   {columnTasks.map((task) => (
-                    <TaskCard key={task.id} task={task} />
+                    <DraggableTaskCard key={task.id} task={task} />
                   ))}
                 </div>
               </SortableContext>

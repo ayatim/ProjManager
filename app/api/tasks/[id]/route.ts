@@ -4,11 +4,12 @@ import { prisma } from '@/lib/prisma';
 // GET single task
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const task = await prisma.task.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         project: true,
         labels: {
@@ -49,9 +50,10 @@ export async function GET(
 // PUT update task
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const body = await request.json();
     const { 
       title, 
@@ -101,13 +103,13 @@ export async function PUT(
     if (labels !== undefined) {
       // Remove all existing labels and add new ones
       await prisma.taskLabel.deleteMany({
-        where: { taskId: params.id }
+        where: { taskId: id }
       });
       
       if (labels.length > 0) {
         await prisma.taskLabel.createMany({
           data: labels.map((labelId: string) => ({
-            taskId: params.id,
+            taskId: id,
             labelId
           }))
         });
@@ -115,7 +117,7 @@ export async function PUT(
     }
     
     const task = await prisma.task.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
       include: {
         labels: {
@@ -139,11 +141,12 @@ export async function PUT(
 // DELETE task
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     await prisma.task.delete({
-      where: { id: params.id }
+      where: { id }
     });
     
     return NextResponse.json({ success: true });
