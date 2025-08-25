@@ -10,7 +10,6 @@ import {
   useSensor,
   useSensors,
   closestCorners,
-  DragOverEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -82,23 +81,7 @@ export function KanbanBoard({ tasks, onTaskMove, onNewTask }: KanbanBoardProps) 
     setActiveTask(null);
   };
 
-  const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event;
-    
-    if (!over) return;
-
-    const activeId = active.id as string;
-    const overId = over.id as string;
-
-    const activeTask = tasks.find((t) => t.id === activeId);
-    if (!activeTask) return;
-
-    // Check if dragging over a column
-    const overColumn = columns.find((col) => col.id === overId);
-    if (overColumn && activeTask.status !== overColumn.id) {
-      onTaskMove(activeId, overColumn.id);
-    }
-  };
+  // Removed handleDragOver to prevent multiple moves during drag
 
   return (
     <DndContext
@@ -106,7 +89,6 @@ export function KanbanBoard({ tasks, onTaskMove, onNewTask }: KanbanBoardProps) 
       collisionDetection={closestCorners}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      onDragOver={handleDragOver}
     >
       <div className="flex gap-6 h-full overflow-x-auto pb-4">
         {columns.map((column) => {
